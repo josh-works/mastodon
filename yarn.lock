@@ -2966,7 +2966,7 @@ __metadata:
     webpack-assets-manifest: "npm:^4.0.6"
     webpack-bundle-analyzer: "npm:^4.8.0"
     webpack-cli: "npm:^3.3.12"
-    webpack-dev-server: "npm:^3.11.3"
+    webpack-dev-server: "npm:^3"
     webpack-merge: "npm:^6.0.0"
     wicg-inert: "npm:^3.1.2"
     workbox-expiration: "npm:^7.0.0"
@@ -18088,7 +18088,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"webpack-dev-server@npm:^3.11.3":
+"webpack-dev-server@npm:^3":
   version: 3.11.3
   resolution: "webpack-dev-server@npm:3.11.3"
   dependencies:
