@@ -56,7 +56,7 @@ RSpec.describe 'Notifications' do
     context 'with exclude_types param' do
       let(:params) { { exclude_types: %w(mention) } }
 
-      it 'returns expected notifications count' do
+      it 'returns expected notifications count', :inline_jobs do
         subject
 
         expect(response).to have_http_status(200)

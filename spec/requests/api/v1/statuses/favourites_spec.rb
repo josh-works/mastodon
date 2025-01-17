@@ -109,7 +109,7 @@ RSpec.describe 'Favourites', :inline_jobs do
         status.account.block!(user.account)
       end
 
-      it 'unfavourites the status successfully and includes updated json', :aggregate_failures do
+      it 'unfavourites the status successfully and includes updated json', :aggregate_failures, sidekiq: :inline do
         subject
 
         expect(response).to have_http_status(200)

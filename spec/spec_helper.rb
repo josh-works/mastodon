@@ -1,11 +1,9 @@
 # frozen_string_literal: true
 
-unless ENV['DISABLE_SIMPLECOV'] == 'true'
+unless ENV['COVERAGE'] == 'true'
   require 'simplecov' # Configuration details loaded from .simplecov
 end
-require "test_prof/recipes/rspec/sample"
-
-
+require 'test_prof/recipes/rspec/sample'
 
 RSpec.configure do |config|
   config.example_status_persistence_file_path = 'tmp/rspec/examples.txt'

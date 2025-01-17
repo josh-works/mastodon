@@ -21,7 +21,7 @@ RSpec.describe 'API V1 Trends Tags' do
     context 'when trends are enabled' do
       before { Setting.trends = true }
 
-      it 'returns http success' do
+      it 'returns http success', sidekiq: :inline do
         prepare_trends
         stub_const('Api::V1::Trends::TagsController::DEFAULT_TAGS_LIMIT', 2)
         get '/api/v1/trends/tags'

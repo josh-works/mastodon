@@ -4,6 +4,20 @@ PR associated with this work: [@mastodon, Help the test harness run more speedil
 
 [Public version of this file you're reading right now](https://gist.github.com/josh-works/63e57445035d1dd3beb604114ea2caac)
 
+big summary of what I'm hoping to do, especially because Vladimir Dementyev, in the time since I opened this PR, did a rails conf talk of how he did/would profile this app!!!!
+
+here's the talk: [ RailsConf 2024 - From slow to go: Rails test profiling hands-on by Vladimir Dementyev (with mastodon!!!!)](https://www.youtube.com/watch?v=PvZw0CnZNPc)
+
+he doesn't seem to have made a PR, though. So nearly all, or actually all, these changes are directly a result of him _doing the work_ but possibly not committing it all.
+
+- [x] disable simplecov most of the time (proven effective, was costing 5 seconds at least every time tests were run)
+- [x] debugger gem getting called all over the place (fixed by setting require: false in Gemfile for that gem)
+- [ ] i18n load path, speeds up boot time, handled in bootsnap
+- [ ] paperclip
+- [x] webpacker: cache_manifest: true (added, seen in the profiling but not directly tested in test timing)
+- [ ] sidekiq:inline test mode, but only for tests that need it instead of all the time. (saving 40% of spec/requests time?)
+-
+
 ## Thursday, April 18, 2024
 
 lets audit/profile + speedrun?
@@ -51,7 +65,7 @@ OK, running tests, everything is failing:
       # ./lib/webpacker/helper_extensions.rb:5:in `javascript_pack_tag'
 ```
 
-something with webpacker. also test logs showing TONS of stuff like: 
+something with webpacker. also test logs showing TONS of stuff like:
 
 ```
 Cache generate: rails_settings_cached/63381685ff04b23fd115d853efac4ba3/registrations_mode ({:compress=>false, :compress_threshold=>1024})
@@ -78,23 +92,24 @@ NODE_ENV=test RAILS_ENV=test bundle exec rails webpacker:compile
 
 yep, something with `yarn`. my yarn version might be out of date, of course.
 
-running `yarn` seems to be doing something, but probably not the right thing. 
+running `yarn` seems to be doing something, but probably not the right thing.
 
 ```
 nvm install 20.12.2
 ```
 
-That ran, lets re-try the webpacker compile. Nope. 
+That ran, lets re-try the webpacker compile. Nope.
 
-Yarn things. 
+Yarn things.
+
 ```
 npm install --global yarn
 ```
 
 Found https://docs.joinmastodon.org/dev/setup/
 
-
 Here's the stuff it took to get me to a locally running server 🤞🏼
+
 ```
 gem install foreman
 RAILS_ENV='development' bundle exec rails db:setup
@@ -102,6 +117,7 @@ yarn install
 NODE_ENV=development RAILS_ENV=development bundle exec rails webpacker:compile
 foreman start
 ```
+
 lets see what I get here. Might get other/more helpful errors around javascript packages, and I "should" be able to run the app locally.
 
 https://github.com/mastodon/mastodon/issues/8853 was helpful/instructive
@@ -110,7 +126,7 @@ Took a bit to get it all happy, but we're compiling in development right now...
 
 and it works. Got a server running, rendering http://localhost:3000/, redirects to mastadon home, http://localhost:3000/explore, huzzah. Test time.
 
-If that works I'll flip it to `test` and re-do it, then re-run tests. 
+If that works I'll flip it to `test` and re-do it, then re-run tests.
 
 ```
 NODE_ENV=test RAILS_ENV=test bundle exec rails webpacker:install
@@ -150,7 +166,7 @@ Randomized with seed 5687
 
 NOOOOOOW we wait. This is the first 'gold standard' single run of the tests, I estimate it'll take up to 30 min.
 
-I'm streaming the dev logs, the lines-per-minute is way higher than open street map. I'll still submit a PR initially turning off logging in the test environment, so I can have my own PR to attach the rest of my notes to. Maybe that'll always be my first step. 
+I'm streaming the dev logs, the lines-per-minute is way higher than open street map. I'll still submit a PR initially turning off logging in the test environment, so I can have my own PR to attach the rest of my notes to. Maybe that'll always be my first step.
 
 1. count the lines of logs generated per test run. oh look now you have initial timing information! (120 lines of logging per second, or 142k lines of logs across 1200 seconds)
 2. turn off logging (`:warn`), submit PR.
@@ -166,7 +182,7 @@ The tests finished, so lets see the length of the logs, and various diagnostics.
 
 `wc -l log/test.log` => 165,171 lines
 
-doesn't seem like that many lines. 
+doesn't seem like that many lines.
 
 ```
 Finished in 20 minutes 34 seconds (files took 16.46 seconds to load)
@@ -182,256 +198,7 @@ here's all the errors, in case I want to fix them later, besides the obvious `br
 
      Paperclip::Errors::CommandNotFoundError:
        Could not run the `ffmpeg` command. Please install ffmpeg.
-     # ./lib/paperclip/image_extractor.rb:44:in `rescue in extract_image_from_file!'
-     # ./lib/paperclip/image_extractor.rb:37:in `extract_image_from_file!'
-     # ./lib/paperclip/image_extractor.rb:10:in `make'
-     # ./lib/paperclip/attachment_extensions.rb:21:in `block in post_process_style'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `each'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `inject'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `post_process_style'
-     # ./spec/models/media_attachment_spec.rb:212:in `block (3 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:215:in `block (3 levels) in <top (required)>'
-     # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-     # ------------------
-     # --- Caused by: ---
-     # Terrapin::CommandNotFoundError:
-     #   Terrapin::CommandNotFoundError
-     #   ./lib/paperclip/image_extractor.rb:39:in `extract_image_from_file!'
-
-
-  2) MediaAttachment mp3 with large cover art sets meta for the duration
-     Failure/Error: raise Paperclip::Errors::CommandNotFoundError, 'Could not run the `ffmpeg` command. Please install ffmpeg.'
-
-     Paperclip::Errors::CommandNotFoundError:
-       Could not run the `ffmpeg` command. Please install ffmpeg.
-     # ./lib/paperclip/image_extractor.rb:44:in `rescue in extract_image_from_file!'
-     # ./lib/paperclip/image_extractor.rb:37:in `extract_image_from_file!'
-     # ./lib/paperclip/image_extractor.rb:10:in `make'
-     # ./lib/paperclip/attachment_extensions.rb:21:in `block in post_process_style'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `each'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `inject'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `post_process_style'
-     # ./spec/models/media_attachment_spec.rb:212:in `block (3 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:219:in `block (3 levels) in <top (required)>'
-     # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-     # ------------------
-     # --- Caused by: ---
-     # Terrapin::CommandNotFoundError:
-     #   Terrapin::CommandNotFoundError
-     #   ./lib/paperclip/image_extractor.rb:39:in `extract_image_from_file!'
-
-
-  3) MediaAttachment mp3 with large cover art extracts thumbnail
-     Failure/Error: raise Paperclip::Errors::CommandNotFoundError, 'Could not run the `ffmpeg` command. Please install ffmpeg.'
-
-     Paperclip::Errors::CommandNotFoundError:
-       Could not run the `ffmpeg` command. Please install ffmpeg.
-     # ./lib/paperclip/image_extractor.rb:44:in `rescue in extract_image_from_file!'
-     # ./lib/paperclip/image_extractor.rb:37:in `extract_image_from_file!'
-     # ./lib/paperclip/image_extractor.rb:10:in `make'
-     # ./lib/paperclip/attachment_extensions.rb:21:in `block in post_process_style'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `each'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `inject'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `post_process_style'
-     # ./spec/models/media_attachment_spec.rb:212:in `block (3 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:223:in `block (3 levels) in <top (required)>'
-     # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-     # ------------------
-     # --- Caused by: ---
-     # Terrapin::CommandNotFoundError:
-     #   Terrapin::CommandNotFoundError
-     #   ./lib/paperclip/image_extractor.rb:39:in `extract_image_from_file!'
-
-
-  4) MediaAttachment mp3 with large cover art gives the file a random name
-     Failure/Error: raise Paperclip::Errors::CommandNotFoundError, 'Could not run the `ffmpeg` command. Please install ffmpeg.'
-
-     Paperclip::Errors::CommandNotFoundError:
-       Could not run the `ffmpeg` command. Please install ffmpeg.
-     # ./lib/paperclip/image_extractor.rb:44:in `rescue in extract_image_from_file!'
-     # ./lib/paperclip/image_extractor.rb:37:in `extract_image_from_file!'
-     # ./lib/paperclip/image_extractor.rb:10:in `make'
-     # ./lib/paperclip/attachment_extensions.rb:21:in `block in post_process_style'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `each'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `inject'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `post_process_style'
-     # ./spec/models/media_attachment_spec.rb:212:in `block (3 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:227:in `block (3 levels) in <top (required)>'
-     # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-     # ------------------
-     # --- Caused by: ---
-     # Terrapin::CommandNotFoundError:
-     #   Terrapin::CommandNotFoundError
-     #   ./lib/paperclip/image_extractor.rb:39:in `extract_image_from_file!'
-
-
-  5) MediaAttachment needs_redownload? when file is present when remote_url is blank returns false
-     Failure/Error: raise Paperclip::Errors::CommandNotFoundError, 'Could not run the `ffprobe` command. Please install ffmpeg.'
-
-     Paperclip::Errors::CommandNotFoundError:
-       Could not run the `ffprobe` command. Please install ffmpeg.
-     # ./app/lib/video_metadata_extractor.rb:15:in `rescue in initialize'
-     # ./app/lib/video_metadata_extractor.rb:7:in `initialize'
-     # ./lib/paperclip/transcoder.rb:23:in `new'
-     # ./lib/paperclip/transcoder.rb:23:in `make'
-     # ./lib/paperclip/gif_transcoder.rb:109:in `make'
-     # ./lib/paperclip/attachment_extensions.rb:21:in `block in post_process_style'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `each'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `inject'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `post_process_style'
-     # ./spec/models/media_attachment_spec.rb:31:in `block (3 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:29:in `block (3 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:52:in `block (5 levels) in <top (required)>'
-     # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-     # ------------------
-     # --- Caused by: ---
-     # Terrapin::CommandNotFoundError:
-     #   Terrapin::CommandNotFoundError
-     #   ./app/lib/video_metadata_extractor.rb:26:in `ffmpeg_command_output'
-
-
-  6) MediaAttachment needs_redownload? when file is present when remote_url is present returns true
-     Failure/Error: raise Paperclip::Errors::CommandNotFoundError, 'Could not run the `ffprobe` command. Please install ffmpeg.'
-
-     Paperclip::Errors::CommandNotFoundError:
-       Could not run the `ffprobe` command. Please install ffmpeg.
-     # ./app/lib/video_metadata_extractor.rb:15:in `rescue in initialize'
-     # ./app/lib/video_metadata_extractor.rb:7:in `initialize'
-     # ./lib/paperclip/transcoder.rb:23:in `new'
-     # ./lib/paperclip/transcoder.rb:23:in `make'
-     # ./lib/paperclip/gif_transcoder.rb:109:in `make'
-     # ./lib/paperclip/attachment_extensions.rb:21:in `block in post_process_style'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `each'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `inject'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `post_process_style'
-     # ./spec/models/media_attachment_spec.rb:31:in `block (3 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:29:in `block (3 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:60:in `block (5 levels) in <top (required)>'
-     # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-     # ------------------
-     # --- Caused by: ---
-     # Terrapin::CommandNotFoundError:
-     #   Terrapin::CommandNotFoundError
-     #   ./app/lib/video_metadata_extractor.rb:26:in `ffmpeg_command_output'
-
-
-  7) MediaAttachment size limit validation rejects video files that are too large
-     Failure/Error: expect { Fabricate(:media_attachment, file: attachment_fixture('attachment.webm')) }.to raise_error(ActiveRecord::RecordInvalid)
-
-       expected ActiveRecord::RecordInvalid, got #<Paperclip::Errors::CommandNotFoundError: Could not run the `ffprobe` command. Please install ffmpeg.> with backtrace:
-         # ./app/lib/video_metadata_extractor.rb:15:in `rescue in initialize'
-         # ./app/lib/video_metadata_extractor.rb:7:in `initialize'
-         # ./app/models/media_attachment.rb:403:in `new'
-         # ./app/models/media_attachment.rb:403:in `ffmpeg_data'
-         # ./app/models/media_attachment.rb:347:in `check_video_dimensions'
-         # ./spec/models/media_attachment_spec.rb:242:in `block (4 levels) in <top (required)>'
-         # ./spec/models/media_attachment_spec.rb:242:in `block (3 levels) in <top (required)>'
-         # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:242:in `block (3 levels) in <top (required)>'
-     # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-
-
-  8) MediaAttachment size limit validation accepts video files that are small enough
-     Failure/Error: raise Paperclip::Errors::CommandNotFoundError, 'Could not run the `ffprobe` command. Please install ffmpeg.'
-
-     Paperclip::Errors::CommandNotFoundError:
-       Could not run the `ffprobe` command. Please install ffmpeg.
-     # ./app/lib/video_metadata_extractor.rb:15:in `rescue in initialize'
-     # ./app/lib/video_metadata_extractor.rb:7:in `initialize'
-     # ./app/models/media_attachment.rb:403:in `new'
-     # ./app/models/media_attachment.rb:403:in `ffmpeg_data'
-     # ./app/models/media_attachment.rb:347:in `check_video_dimensions'
-     # ./spec/models/media_attachment_spec.rb:248:in `block (3 levels) in <top (required)>'
-     # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-     # ------------------
-     # --- Caused by: ---
-     # Terrapin::CommandNotFoundError:
-     #   Terrapin::CommandNotFoundError
-     #   ./app/lib/video_metadata_extractor.rb:26:in `ffmpeg_command_output'
-
-
-  9) MediaAttachment animated gif sets correct file metadata
-     Failure/Error: raise Paperclip::Errors::CommandNotFoundError, 'Could not run the `ffprobe` command. Please install ffmpeg.'
-
-     Paperclip::Errors::CommandNotFoundError:
-       Could not run the `ffprobe` command. Please install ffmpeg.
-     # ./app/lib/video_metadata_extractor.rb:15:in `rescue in initialize'
-     # ./app/lib/video_metadata_extractor.rb:7:in `initialize'
-     # ./lib/paperclip/transcoder.rb:23:in `new'
-     # ./lib/paperclip/transcoder.rb:23:in `make'
-     # ./lib/paperclip/gif_transcoder.rb:109:in `make'
-     # ./lib/paperclip/attachment_extensions.rb:21:in `block in post_process_style'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `each'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `inject'
-     # ./lib/paperclip/attachment_extensions.rb:20:in `post_process_style'
-     # ./spec/models/media_attachment_spec.rb:168:in `block (3 levels) in <top (required)>'
-     # ./spec/models/media_attachment_spec.rb:171:in `block (3 levels) in <top (required)>'
-     # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-     # ------------------
-     # --- Caused by: ---
-     # Terrapin::CommandNotFoundError:
-     #   Terrapin::CommandNotFoundError
-     #   ./app/lib/video_metadata_extractor.rb:26:in `ffmpeg_command_output'
-
-
-  10) MediaAttachment ogg with cover art sets correct file metadata
-      Failure/Error: raise Paperclip::Errors::CommandNotFoundError, 'Could not run the `ffmpeg` command. Please install ffmpeg.'
-
-      Paperclip::Errors::CommandNotFoundError:
-        Could not run the `ffmpeg` command. Please install ffmpeg.
-      # ./lib/paperclip/image_extractor.rb:44:in `rescue in extract_image_from_file!'
-      # ./lib/paperclip/image_extractor.rb:37:in `extract_image_from_file!'
-      # ./lib/paperclip/image_extractor.rb:10:in `make'
-      # ./lib/paperclip/attachment_extensions.rb:21:in `block in post_process_style'
-      # ./lib/paperclip/attachment_extensions.rb:20:in `each'
-      # ./lib/paperclip/attachment_extensions.rb:20:in `inject'
-      # ./lib/paperclip/attachment_extensions.rb:20:in `post_process_style'
-      # ./spec/models/media_attachment_spec.rb:200:in `block (3 levels) in <top (required)>'
-      # ./spec/models/media_attachment_spec.rb:203:in `block (3 levels) in <top (required)>'
-      # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-      # ------------------
-      # --- Caused by: ---
-      # Terrapin::CommandNotFoundError:
-      #   Terrapin::CommandNotFoundError
-      #   ./lib/paperclip/image_extractor.rb:39:in `extract_image_from_file!'
-
-
-  11) Media POST /api/v1/media with video/webm behaves like a successful media upload uploads the file successfully and returns correct media content
-      Got 3 failures and 1 other error:
-      Shared Example Group: "a successful media upload" called from ./spec/requests/api/v1/media_spec.rb:139
-
-      11.1) Failure/Error: expect(response).to have_http_status(200)
-              expected the response to have status code 200 but it was 500
-            # ./spec/requests/api/v1/media_spec.rb:82:in `block (4 levels) in <top (required)>'
-            # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-
-      11.2) Failure/Error: expect(MediaAttachment.first).to be_present
-              expected `nil.present?` to be truthy, got false
-            # ./spec/requests/api/v1/media_spec.rb:83:in `block (4 levels) in <top (required)>'
-            # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-
-      11.3) Failure/Error: expect(MediaAttachment.first).to have_attached_file(:file)
-              Should have an attachment named file
-            # ./spec/requests/api/v1/media_spec.rb:84:in `block (4 levels) in <top (required)>'
-            # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-
-      11.4) Failure/Error: a_hash_including(id: MediaAttachment.first.id.to_s, description: params[:description], type: media_type)
-
-            NoMethodError:
-              undefined method `id' for nil:NilClass
-            # ./spec/requests/api/v1/media_spec.rb:87:in `block (4 levels) in <top (required)>'
-            # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
-
-
-  12) Media API POST /api/v2/media when large format media attachment has not been processed returns http accepted
-      Failure/Error:
-        expect(File.exist?(user.account.media_attachments.first.file.path(:small)))
-          .to be true
-
-      NoMethodError:
-        undefined method `file' for nil:NilClass
-      # ./spec/requests/api/v2/media_spec.rb:35:in `block (4 levels) in <top (required)>'
-      # ./spec/rails_helper.rb:107:in `block (2 levels) in <top (required)>'
+     # ./lib/paperclip/image_extractor.rb:44:in `rescue in
 
 
 ```
@@ -451,13 +218,13 @@ That seems so slow, but with a fast load time. This is on par with rails apps I'
 
 First thing I'll do will be turn off my wifi and re-run the tests, JUST TO MAKE SURE IT ABSOLUTELY WORKS. I've not even peeked to see if VCR is in the gemfile... once xcode select is done installing. lol.
 
-Since it takes 20 minutes locally, I remember now seeing NOT 20 minutes when looking on the github actions build process. 
+Since it takes 20 minutes locally, I remember now seeing NOT 20 minutes when looking on the github actions build process.
 
 https://github.com/mastodon/mastodon/actions/runs/8742139749/job/23989707460?pr=29173
 
 looks like the tests are run in groups, like `bundle exec rake spec:system`
 
-but sometimes it says it runs `bin/rspec` and _that_ finishes in 5m53s. So fast. hm. 
+but sometimes it says it runs `bin/rspec` and _that_ finishes in 5m53s. So fast. hm.
 
 Anyway, xcode-select is installed, and re-installing ffmpeg and... gosh another long installation process.
 
@@ -469,7 +236,7 @@ ffmpeg finally finished, took like, lets re-run a single previously failing ffmp
 rspec ./spec/models/media_attachment_spec.rb:214 --profile
 ```
 
-that worked. 
+that worked.
 
 lets re-do the whole suite, make sure the logs are turned off now:
 
@@ -477,7 +244,7 @@ lets re-do the whole suite, make sure the logs are turned off now:
 time RAILS_ENV=test b  rspec --profile
 ```
 
-looks like it's working great, and there's no more logs getting written. 
+looks like it's working great, and there's no more logs getting written.
 
 Confirmed, re-enabling logging, and all is good. I don't need to be running `webpack-dev-server` for tests, btw. Just local development.
 
@@ -550,9 +317,9 @@ Coverage report generated for RSpec to /Users/joshthompson/software_projects/mas
 RAILS_ENV=test bundle exec rspec --profile  793.44s user 418.39s system 95% cpu 21:09.07 total
 ```
 
-I don't really care about the slowest tests yet, want to see what factories are humming along. 21 minutes total, zero failures, the `ffmpeg` thing is good to go. 
+I don't really care about the slowest tests yet, want to see what factories are humming along. 21 minutes total, zero failures, the `ffmpeg` thing is good to go.
 
----------
+---
 
 ### `puts` statements in `user` and `account` factories
 
@@ -604,18 +371,18 @@ Fabricator(:user) do
 end
 ```
 
-I'm watching thousands of users/accounts be created, btw. probably over 5000 of each, through the test run. OSM had 4000 accounts created in 7 min. this doesn't feel like its gonna matter. it's annoying how slow the whole suite is. 
+I'm watching thousands of users/accounts be created, btw. probably over 5000 of each, through the test run. OSM had 4000 accounts created in 7 min. this doesn't feel like its gonna matter. it's annoying how slow the whole suite is.
 
-tests do run faster when I break every `create(:user)` call, perhaps. 
+tests do run faster when I break every `create(:user)` call, perhaps.
 
 HAH! The tests run in 2:15 when I break all the `user` calls. TWO MINUTES AND FIFTEEN SECONDS!!!!!
 
 Finished in 1 minute 58.55 seconds (files took 12.51 seconds to load)
 5540 examples, 3977 failures
 
-So, almost every spec broke. 
+So, almost every spec broke.
 
-Seems to validate, though, looking at speeding up this portion of the process. 
+Seems to validate, though, looking at speeding up this portion of the process.
 
 OK, tried bringing a hard-coded idea to the table, but I'm afraid validations are still running, so there's no speed improvement:
 
@@ -633,11 +400,11 @@ Fabricator(:user) do
 end
 ```
 
-if i didn't give a `password` value, no dice, of if it wasn't long enough, got a validations error. 
+if i didn't give a `password` value, no dice, of if it wasn't long enough, got a validations error.
 
-The way to see, I suppose, would be to (oooh, a bunch of failures) do `p user.encrypted_password` a few different spots in the app, see if they're the given value or something different. 
+The way to see, I suppose, would be to (oooh, a bunch of failures) do `p user.encrypted_password` a few different spots in the app, see if they're the given value or something different.
 
-That could prove it didn't work, wouldn't prove it _did_ work. 
+That could prove it didn't work, wouldn't prove it _did_ work.
 
 Lol, OK, found this:
 
@@ -670,12 +437,12 @@ the factory is saving different encrypted_password values:
 Run options: exclude {:search=>true, :type=>#<Proc: ./spec/rails_helper.rb:53>}
 
 Randomized with seed 55846
-"account 0"                                                                                               
+"account 0"
 "user 0"
 "account 1"
 "user 1"
 "$2a$04$UIHnzPGZB4nsbrxCxZtZRe8i7oeuaP4XDdypXhIDFeX3mjQhXVpti"
-"account 2"                                   
+"account 2"
 "user 2"
 "account 3"
 "user 3"
@@ -695,8 +462,6 @@ RAILS_ENV=test bundle exec rspec --profile  790.51s user 421.22s system 94% cpu 
 ```
 
 21.5 minutes. it's _supposed_ to be 'high single digits', maybe it's bc I'm running this on a weak, old laptop. oh well, it's all relative.
-
-
 
 ## Monday, May 20, 2024
 
@@ -721,7 +486,6 @@ EVENT_PROF=sql.active_record  RAILS_ENV=test bundle exec rspec spec/controllers/
 🤞🏼
 
 Cool, got valid output, here's the new stuff:
-
 
 ```
 [TEST PROF INFO] EventProf results for sql.active_record
@@ -777,20 +541,7 @@ stackprof tmp/test_prof/stack-prof-report-wall-raw-boot-1635313.dump
         90   (1.0%)          50   (0.6%)     Module#module_eval
        407   (4.7%)          37   (0.4%)     Kernel.load
         43   (0.5%)          32   (0.4%)     String#gsub!
-        32   (0.4%)          32   (0.4%)     String#split
-        31   (0.4%)          31   (0.4%)     Encoding.find
-        52   (0.6%)          30   (0.3%)     Bootsnap::LoadPathCache::LoadedFeaturesIndex#initialize
-        27   (0.3%)          27   (0.3%)     Dir.[]
-      7853  (91.0%)          22   (0.3%)     Array#each
-      4955  (57.4%)          21   (0.2%)     Kernel#require
-        20   (0.2%)          20   (0.2%)     Module#define_method
-        20   (0.2%)          20   (0.2%)     PG::Connection#exec_params
-        44   (0.5%)          18   (0.2%)     Bootsnap::LoadPathCache::Cache#find
-       369   (4.3%)          16   (0.2%)     Thread::Mutex#synchronize
-        48   (0.6%)          16   (0.2%)     MIME::Type.simplify_matchdata
-        30   (0.3%)          16   (0.2%)     ActionDispatch::Routing::Mapper::Scope#each
-        41   (0.5%)          15   (0.2%)     Bootsnap::LoadPathCache::LoadedFeaturesIndex#register
-        15   (0.2%)          15   (0.2%)     File.exist?
+
 ```
 
 Excellent. Lets run this one more time, in tight succession:
@@ -825,20 +576,12 @@ stackprof tmp/test_prof/stack-prof-report-wall-raw-boot-1636578.dump
         47   (0.6%)          27   (0.3%)     Bootsnap::LoadPathCache::LoadedFeaturesIndex#initialize
         45   (0.6%)          27   (0.3%)     ActionDispatch::Routing::Mapper::Scope#each
       7106  (91.6%)          17   (0.2%)     Array#each
-       170   (2.2%)          17   (0.2%)     Rails::Initializable::Collection#tsort_each_child
-        17   (0.2%)          17   (0.2%)     Dir.[]
-        15   (0.2%)          15   (0.2%)     IO#set_encoding
-        23   (0.3%)          15   (0.2%)     String#gsub!
-        14   (0.2%)          14   (0.2%)     File.directory?
-        14   (0.2%)          14   (0.2%)     File.exist?
-      4256  (54.9%)          13   (0.2%)     Kernel#require
-        49   (0.6%)          13   (0.2%)     Enumerable.find
-        41   (0.5%)          13   (0.2%)     Bootsnap::LoadPathCache::Cache#push_paths_locked
+
 ```
 
 cool. `Kernel#require` being the biggest thing, and ~80% of the total time spent in the first 4 results tracks. (80/20)
 
-It sampled 90 % of the frames, and perhaps spent 8.2% on garbage collection. 
+It sampled 90 % of the frames, and perhaps spent 8.2% on garbage collection.
 
 Now that we know how to view the results, lets profile something else.
 
@@ -848,7 +591,7 @@ now prepend `SAMPLE 10` to the next call?
 
 `SAMPLE=10 TEST_STACK_PROF=1 RAILS_ENV=test bundle exec rspec spec/controllers`
 
-Looking promising so far. 
+Looking promising so far.
 
 Lets do a larger thing. I cannot run the 1 gb dump file, so I'm gonna try re-running the whole thing with the `SAMPLE` envvar included: `SAMPLE=10 TEST_STACK_PROF=1 RAILS_ENV=test bundle exec rspec spec`
 
@@ -862,7 +605,7 @@ OK, getting some nice output. No obvious leads yet. I still am running `puts` st
 
 It seems like most of the time is being spent not in account/user creation. Just an intuition, watching the timing of the puts statements, tests passing (or failing) and tail'ing `log/test.log`.
 
-I want a verbose mode. I want to know the tests are hanging out - some sort of 'current_file_test.rb`  output would be handy. 
+I want a verbose mode. I want to know the tests are hanging out - some sort of 'current_file_test.rb` output would be handy.
 
 ## Thursday, May 23, 2024
 
@@ -873,6 +616,7 @@ And in open street map's profile, I got 50% time savings with this same fix.
 We can see that tons of app time is spent in `Kernal#require`, I wonder if that's what it would look like if Devise was eating all this time doing needless computational work.
 
 Lets open up the devise gem and find that function.
+
 ```
 $ bundle open devise
 # 'mvim /Users/joshthompson/.rbenv/versions/3.2.3/lib/ruby/gems/3.2.0/gems/devise-4.9.4'
@@ -913,7 +657,7 @@ When I dig into the above method. I've got it working, going to get home so I ca
 
 (devise, calling BCrypt::Engine.hash_secret, every time a user is created. Perhaps a let_it_be block)
 
-i'll look later. this was a fruitful exploration. I can hardcode values in the Bcrypt or Devise gem, locally, to simulate what it would be like if no computational cycles were spent doing that effort, and indeed tests seem faster. 
+i'll look later. this was a fruitful exploration. I can hardcode values in the Bcrypt or Devise gem, locally, to simulate what it would be like if no computational cycles were spent doing that effort, and indeed tests seem faster.
 
 Here's a small little benchmark, to see what comes up.
 
@@ -945,10 +689,10 @@ seems maybe the same.
 
 Profiled the whole test suite, took forever, trying to play with, and I'm gonna focus on model tests for a time
 
-
 ```
 TAG_PROF=type TAG_PROF_FORMAT=html TAG_PROF_EVENT=sql.active_record,sidekiq.inline bin/rspec spec/models
 ```
+
 something is running slow as hell, but my macbook fan has been pegged for a while, maybe i'll give a restart and try again.
 
 # Thursday, July 11, 2024
@@ -959,7 +703,7 @@ bleh
 TAG_PROF=type TAG_PROF_FORMAT=html TAG_PROF_EVENT=sql.active_record,factory.create bin/rspec spec/features/admin/accounts_spec.rb
 ```
 
-generates a shit report. 
+generates a shit report.
 
 ```
 TEST_STACK_PROF=1 bin/rspec spec/features/admin/accounts_spec.rb
@@ -996,7 +740,7 @@ EVENT_PROF="sql.active_record" bundle exec rspec spec/controllers/activitypub/re
 
 ```
 
-Im having trouble capturing factory usage, btw. the normal recommendations didn't acpture it. 
+Im having trouble capturing factory usage, btw. the normal recommendations didn't acpture it.
 
 I note that devise/bcrypt isn't getting skipped at all.
 
@@ -1013,12 +757,12 @@ Got this nice output:
 [TEST PROF INFO] Time spent in factories: 02:08.891 (73.24% of total time)
 [TEST PROF INFO] Factories usage
 
- Total: 2324
- Total top-level: 2296
- Total time: 02:08.891 (out of 02:56.007)
- Total uniq factories: 52
+Total: 2324
+Total top-level: 2296
+Total time: 02:08.891 (out of 02:56.007)
+Total uniq factories: 52
 
-   total   top-level     total time      time per call      top-level time               name
+total top-level total time time per call top-level time name
 
      920         910       26.5414s            0.0288s            26.3044s            account
      635         624       13.7606s            0.0217s            13.4190s             status
@@ -1032,11 +776,11 @@ Got this nice output:
       25          25        0.0782s            0.0031s             0.0782s    software_update
       24          24        0.7614s            0.0317s             0.7614s     follow_request
 
-It continues, but that is a nice starting point. 
+It continues, but that is a nice starting point.
 
-The total time in factories was 73%, and of that 73%, it looks like 1/4th of it was the account setup time. 
+The total time in factories was 73%, and of that 73%, it looks like 1/4th of it was the account setup time.
 
-Lets see if we can make that go away via the `let it be` hook. I'm also going to re-run the whole test suite now, compare the factory usage in model tests alone (where I expect the time spent in factories might be high) and with the whole suite I expect factory time to be lower. 
+Lets see if we can make that go away via the `let it be` hook. I'm also going to re-run the whole test suite now, compare the factory usage in model tests alone (where I expect the time spent in factories might be high) and with the whole suite I expect factory time to be lower.
 
 # Wednesday, September 4, 2024
 
@@ -1068,7 +812,8 @@ Here's the account spec, before:
 
 Not having luck doing low-touch conversions to `let_it_be`, as the objects are not returned to a correct state, but I did some bad obviously-not-working setup to try to hammer through the error messages.
 
-like: 
+like:
+
 ```ruby
 TestProf::BeforeAll.configure do |config|
   config.before(:begin) do
@@ -1103,16 +848,16 @@ end
 
 TestProf::BeforeAll.adapter = ActiveRecordAdapterWithSetup
 ```
+
 meh. TestProf::BeforeAll::AdapterMissing, Please, provide an adapter for `before_all` through `TestProf::BeforeAll.adapter = MyAdapter`
 
 no clue
-
 
 # Oct 1
 
 OK, decided to make a minimum mergable PR that is JUST turning off logging, and benchmarking the results, before and after.
 
-My tests seem to be very slow. Currently the process is running the tests at 6gb of memory pressure, and 34% cpu? it seems my tests are taking a lot longer than other people's. 
+My tests seem to be very slow. Currently the process is running the tests at 6gb of memory pressure, and 34% cpu? it seems my tests are taking a lot longer than other people's.
 
 Anyway, I'll reset the code to whatever's on main right now, run tests once or twice, then turn off logs, run them twice more, and maybe go back and forth.
 
@@ -1132,12 +877,12 @@ if you see this, devise/bcrypt didn't get skipped
 "user 2258"
 ```
 
-so, I think `gem reset --pristine`, then `git fetch main`, then `git diff`, then do a `git reset --soft`, then discard changes. 
+so, I think `gem reset --pristine`, then `git fetch main`, then `git diff`, then do a `git reset --soft`, then discard changes.
 
 I don't want to throw away these notes, for example, but I do want to get rid of all changes I made in the `spec` directory, for example.
 
 ```
-# update rbenv, 
+# update rbenv,
 brew upgrade ruby-build
 rbenv install 3.3.5
 RAILS_ENV='development' NODE_ENV=development bundle install
@@ -1158,15 +903,15 @@ debugging the webpacker require stack. fml. I can compile/run in development, I'
 
 `rails webpacker:compile Cannot find module debug require stack`
 
-jfc got it working. did another `git reset --hard HEAD`, re-installed webpacker, but instead of overwriting conflicts, I rejected any changes where there were conflicts, and then it finally worked. 
+jfc got it working. did another `git reset --hard HEAD`, re-installed webpacker, but instead of overwriting conflicts, I rejected any changes where there were conflicts, and then it finally worked.
 
 ```
 NODE_ENV=test RAILS_ENV=test bundle exec rails webpacker:compile
-``` 
+```
 
 fuck, still errors. I need to see where yarn is installing packages, and make that available to webpacker somehow???? fuuuuuuuuuck.
 
-----------------------
+---
 
 Watching this AMAZING talk that was done SINCE I OPENED THIS PR on THE MASTODON CODE BASE!!!
 
@@ -1182,7 +927,7 @@ He got his time down by 75%, from 8:30 to 2:30. Big improvements with CI too. wo
 
 ## Starting with general profiling
 
-(highly generalizable skill) stack prof and verneer. 
+(highly generalizable skill) stack prof and verneer.
 
 getting tests happy again, so did `git remote add upstream mastodon/mastodon` type thing, updated the `main` branch I was looking at locally to the `main` up there. Lots of changes, new ruby version, so I need to update it, etc.
 
@@ -1197,18 +942,21 @@ bundle install
 Running:
 
 ```
+
 $ time RAILS_ENV=test b rspec spec/models/
 Run options: exclude {:streaming=>true, :search=>true, :js=>true}
 
 Randomized with seed 50162
+
 ```
 Got:
 
 ```
+
 Finished in 1 minute 28.44 seconds (files took 9.81 seconds to load)
 1243 examples, 0 failures
 
-RAILs_ENV=test bundle exec rspec spec/models/  65.37s user 16.02s system 80% cpu 1:41.73 total```
+RAILs_ENV=test bundle exec rspec spec/models/ 65.37s user 16.02s system 80% cpu 1:41.73 total```
 
 lets see about how to profile this.
 
@@ -1248,6 +996,7 @@ now we can do:
 ```
 ❯ SAMPLE=100 b rspec --seed 50900
 ```
+
 Turn off simple cov running every time:
 
 ```diff
@@ -1276,5 +1025,175 @@ diff --git a/spec/rails_helper.rb b/spec/rails_helper.rb
 
 tagprof profiler
 
-TAG_PROF=type TAG_PROF_FORMAT=html TAG_PROF_EVENT=sql.active_record,factory.create,sidekiq.inline,paperclip,post_process b rspec
+in rails_helper:
 
+`require test_prof/...`?
+
+```
+TAG_PROF=type TAG_PROF_FORMAT=html TAG_PROF_EVENT=sql.active_record,factory.create,sidekiq.inline,paperclip,post_process b rspec
+```
+
+## January 2025
+
+iirc last time I was struggling to get the tests pristine again, so I could be working off a fairly-close-to-recent copy of the main branch. that broke a bunch of stuff, _including my terminal with this stupid TRX stuff so I got rid of TRX_, finally have tests running again.
+
+anyway, I finally was able to get `bundle install` to work - i hadn't done it since updating my ruby version, which blah blah blah last time I made the PR, this is just all practice anyway. Timing the difference between:
+
+```
+$ COVERAGE=true b rspec spec/models/account/field_spec.rb
+Run options: exclude {:streaming=>true, :search=>true, :js=>true}
+
+Randomized with seed 41434
+.................
+
+Finished in 0.20584 seconds (files took 9.65 seconds to load)
+17 examples, 0 failures
+
+Randomized with seed 41434
+
+THESE LINES TOOK A LONG TIME TO GET PRINTED TO THE TERMINAL
+Coverage report generated for RSpec to /Users/joshthompson/software_projects/mastodon/coverage.
+Line Coverage: 4.31% (1774 / 41114)
+Branch Coverage: 3.32% (43 / 1294)
+```
+
+and the time was 13 seconds.
+
+Without coverage, thus skipping the load and initialization and everything, it took NINE SECONDS!!! for a big gain.
+
+Huge win.
+
+Next, Vladimir talks about the `I18n.load_path` fix bc internationalization was showing up in some profiling output.
+
+I replecated what he did, and fired up a rails console in a test environment, and ran `I18n.load_path.size`, and got the same value he did, almost. 1159. That's more than we need.
+
+this will speed up the boot process.
+
+calling lots of Devise#encrypt, I already tried to stub this value to share across all objects, per my [openstreetmaps PR](https://github.com/openstreetmap/openstreetmap-website/pull/4708)
+
+Eventually I'll figure out how to jump between my branch and master, timing the two, it'll be a big difference I think.
+
+```
+TAG_PROF=type TAG_PROF_FORMAT=html TAG_PROF_EVENT=sql.active_record,factory.create,sidekiq.inline,paperclip.post_process bundle exec rspec
+```
+
+Had to try a few times to get the command to work (removed spaces, bundle exec instead of b, and play with where I placed this monitor snippet in the `rails_helper.rb` file. I was getting `uninitialized constant paperclip` otherwise)
+
+```ruby
+# rails_helper.rb
+
+require 'test-prof'
+TestProf::EventProf.monitor(
+  Paperclip::Attachment,
+  'paperclip.process_file',
+  :process_file
+)
+```
+
+but now it works. super cool. taking its time, wonder how long the full run will take.
+
+If the report is correct, which it looks like it's generating a report (it says `tagprof enabled` as the tests start...), it'll be super worth it, I think.
+
+His machine ran the tests so fast! He said 1.5 minutes on his machine, for the whole test suite? Mine takes many minutes.
+
+"rails profiling story, or how I caught faker" article, he says maybe a fix in the article he wrote about it: https://evilmartians.com/chronicles/rails-profiling-story-or-how-i-caught-faker-trying-to-teach-my-app-australian-slang
+
+Wowowow. references [this gist](https://gist.github.com/palkan/79fc88207dc856532fb777b8204f7131) that maybe could be copied/pasted into the `rails_helper.rb`? I'll try it once my tests finish running, which is... still happening.
+
+bleh. taking so many minutes. cancelled it. Model tests alone took a minute ten seconds.
+
+Now doing the `Sidekiq::Testing.fake!` and `Sidekiq::Testing.inline!` config change, but it looks like someone else possibly already did this.
+
+No, the tags were not added to the codebase, and I'm not yet replicating the failures.
+
+Might skip this bit to come back later... or just got it:
+
+```
+❯ EVENT_PROF=sidekiq.inline bundle exec rspec spec/requests
+```
+
+shows nice output: `[TEST PROF INFO] EventProf enabled (sidekiq.inline)`
+
+tests run, then it seems like of the total percent, X% was spent in sidekiq.
+
+'git blame spec/rails_helper.rb`, exploring the commits there, seems this work has not been done.
+
+## Jan 16
+
+a bit more work the next day. tests finished, I really wanna see the `RSTAMP` thing work - mass fix tests?
+
+I 'built up' my understanding of how this method works:
+
+```ruby
+# spec/rails_helper
+  config.around do |example|
+    if example.metadata[:inline_jobs] == true
+      Sidekiq::Testing.inline!
+    else
+      Sidekiq::Testing.fake!
+    end
+    example.run
+  end
+
+```
+
+Seeing the failing tests when I don't toggle to `sidekiq::Testing.inline!`. Sorta? It takes 7 minutes overall to run, wild, and now I'm seeing NO sidekiq.inline usage, which doesn't match my expectations. also 40 failures. Confirming some stuff, seeing lots of passing tests and evidence that the sidekiq testing method thing is working. oh thank god.
+
+Here's how I know:
+
+```ruby
+config.around do |example|
+    if example.metadata[:inline_jobs] == true
+      puts example.metadata[:inline_jobs].to_s
+      Sidekiq::Testing.inline!
+    else
+      Sidekiq::Testing.fake!
+    end
+    example.run
+  end
+```
+
+and here's some output from the tests. how nice:
+
+```pre
+❯ EVENT_PROF=sidekiq.inline bundle exec rspec spec/requests/
+Run options: exclude {:streaming=>true, :search=>true, :js=>true}
+
+Randomized with seed 41852
+[TEST PROF INFO] EventProf enabled (sidekiq.inline)
+...............................................................................................................................true
+.true
+...................................................................................................................................................................true
+.......................................................................................................................................................................................................................................................................................................................................................................................................true
+..............................true
+....true
+......true
+.....true
+...true
+..........................................................................................................true
+.true
+.true
+.true
+................................................................true
+.true
+..................................................true
+.true
+.true
+```
+
+and sorta tracking how much of the time is spent in `sidekiq.inline` method. It's not been quite as stark as I'd hoped but we'll see. My machine also seems slow as heck.
+
+test prof output:
+
+```
+[TEST PROF INFO] EventProf results for sidekiq.inline
+
+Total time: 00:43.509 of 07:07.897 (10.17%)
+Total events: 904
+```
+
+```
+RSTAMP=sidekiq:inline bundle exec rspec spec/requests
+```
+
+we'll see if it does anything.
