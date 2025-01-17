@@ -90,7 +90,7 @@ RSpec.describe MediaAttachment, :attachment_processing do
       media.destroy
     end
 
-    it 'saves media attachment with correct file and size metadata' do
+    it 'saves media attachment with correct file and size metadata', sidekiq: :inline do
       expect(media)
         .to be_persisted
         .and be_processing_complete

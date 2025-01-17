@@ -1197,3 +1197,39 @@ RSTAMP=sidekiq:inline bundle exec rspec spec/requests
 ```
 
 we'll see if it does anything.
+
+did a little, maybe not a lot, now running `RSTAMP` on the whole test suite, per Vlad's comment that it could be done.
+
+oooh, just heard i'm nudging forward in an interview process w/TP. phew. I'd expected it, sorta been told as such, AND YET it's nice to have that moving along. Now I get to perhaps stress a bit about the technical interview, i'll book it for Tuesday, calendly says that it's available... it is now booked. phew.
+
+Running rstamp on the whole suite is gnarly, I think.
+
+Cool that Paperclip is already fixed in the codebase, too. Vlad handles this at the 1 hr 7 minute.
+
+He does such cool exploration of the fix. Finds the right syntax, capture some expensive method calls and return a given answer. monkey patching the class to give it `Paperclip::Testing.fake!` and `Paperclip::Testing.real!` and more. hm. Then he uses `RSTAMP` to tag all the failing tests somehow?
+
+huge speed up of test run time.
+
+```ruby
+config.before do |example|
+    unless example.metadata[:attachment_processing]
+      allow_any_instance_of(Paperclip::Attachment).to receive(:post_process).and_return(true)
+    end
+  end
+```
+
+cool, amazing, truly. my computer is so slow my freaking RSTUB run of the whole test suite is STILL RUNNING like ten minutes later. he doesn't get it quite working, so it's okay that it isn't trivial to me.
+
+[a few more minutes spent on this, a few hours later]
+
+Tests done, two failures, but I think unrelated, I possibly have not run the full suite in a while. Adding the Sidekiq:inline thing didn't fix it, it's an imagemagic gem issue, I remember something like this cropping up before, so I'm gonna sorta cruise past it.
+
+OK, none others added. Done with the RSTUB thing for Sidekiq.
+
+On to Paperclip. I wonder if I'll do the full fix that he does.
+
+I think... think I could.
+
+- [ ] stub expensive paperclip calls: It's the 1:07-1:17 time stamp of the video.
+
+I note a desire to clean up this PR to include all the fixes up to here, to get the maintainer perspectives/benchmarks, so I might do that next, instead of the paperclip thing.
